@@ -50,8 +50,13 @@ async function route(request, env) {
   }
   if (url.pathname === '/api/dashboard' && method === 'GET') {
     const rows = await balances(env.DB);
-    const alerts = (await env.DB.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status='OPEN'").first()).c;
-    return json({ items: rows.filter((r) => r.active).length, shop_units: rows.reduce((n, r) => n + r.shop, 0), store_units: rows.reduce((n, r) => n + r.store, 0), open_alerts: alerts });
+    const active = rows.filter((r) => r.active); const day = today();
+    const counted = (await env.DB.prepare(`SELECT COUNT(*) AS c FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.count_date=? AND i.active=1`).bind(day).first()).c;
+    const moves = (await env.DB.prepare('SELECT COUNT(*) AS c FROM movements WHERE movement_date=?').bind(day).first()).c;
+    const alertRows = (await env.DB.prepare(`SELECT kind,COUNT(*) AS c FROM alerts WHERE status IN ('OPEN','ACKNOWLEDGED') GROUP BY kind`).all()).results;
+    const alerts = Object.fromEntries(alertRows.map((r) => [r.kind, r.c]));
+    const recent = (await env.DB.prepare(`SELECT m.movement_date,i.name AS item,m.direction,m.qty,m.note,m.user FROM movements m JOIN items i ON i.id=m.item_id ORDER BY m.id DESC LIMIT 8`).all()).results;
+    return json({ date: day, active_items: active.length, shop_total: active.reduce((n, r) => n + r.shop, 0), store_total: active.reduce((n, r) => n + r.store, 0), moves_today: moves, count: { counted, total: active.length }, alerts, recent });
   }
   if (url.pathname === '/api/movements' && method === 'POST') {
     const a = await body(request); const qty = Number(a.qty); const direction = a.direction;
