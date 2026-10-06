@@ -11,6 +11,28 @@ async function itemBy(db, ref) {
   return row;
 }
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
+function validDate(value) {
+  const d = String(value || today());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(`${d}T00:00:00Z`)) || d > today()) fail('Date must be a valid date that is not in the future.');
+  return d;
+}
+function nonNegative(value, label) {
+  const n = Number(value ?? 0); if (!Number.isInteger(n) || n < 0) fail(`${label} must be a non-negative whole number.`); return n;
+}
+async function syncAlerts(db) {
+  const rows = await balances(db);
+  for (const r of rows) for (const [location, key, min] of [['SHOP','shop',r.min_shop],['STORE','store',r.min_store]]) {
+    const ref = `STOCK:${location}:${r.id}`; const kind = r.active && min > 0 ? (r[key] <= 0 ? 'OUT' : r[key] < min ? 'LOW' : null) : null;
+    if (kind) await db.prepare(`INSERT INTO alerts (ref_key,kind,item_id,location,message) VALUES (?,?,?,?,?) ON CONFLICT(ref_key) DO UPDATE SET kind=excluded.kind,message=excluded.message,status=CASE WHEN alerts.status='CLEARED' THEN 'OPEN' ELSE alerts.status END`).bind(ref,kind,r.id,location,`${r.name} is ${kind === 'OUT' ? 'out of stock' : 'low'} in ${location}: ${r[key]} ${r.unit} (minimum ${min})`).run();
+    else await db.prepare(`UPDATE alerts SET status='CLEARED',resolved_at=datetime('now'),resolution='Auto-cleared: above minimum' WHERE ref_key=? AND status IN ('OPEN','ACKNOWLEDGED')`).bind(ref).run();
+  }
+}
+function csv(rows) {
+  if (!rows.length) return '';
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const quote = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  return [keys.join(','), ...rows.map((r) => keys.map((k) => quote(r[k])).join(','))].join('\r\n');
+}
 
 async function balances(db, asOf = null) {
   const end = asOf || today();
@@ -36,8 +58,9 @@ async function route(request, env) {
   }
   if (url.pathname === '/api/items' && method === 'POST') {
     const a = await body(request); const name = String(a.name || '').trim(); if (!name) fail('Item name is required.');
+    const minShop=nonNegative(a.min_shop,'Shop minimum'), minStore=nonNegative(a.min_store,'Store minimum'), openingShop=nonNegative(a.opening_shop,'Opening Shop quantity'), openingStore=nonNegative(a.opening_store,'Opening Store quantity');
     try {
-      const result = await env.DB.prepare(`INSERT INTO items (name,category,unit,min_shop,min_store,opening_shop,opening_store) VALUES (?,?,?,?,?,?,?) RETURNING *`).bind(name, String(a.category || 'General'), String(a.unit || 'pcs'), Number(a.min_shop || 0), Number(a.min_store || 0), Number(a.opening_shop || 0), Number(a.opening_store || 0)).first();
+      const result = await env.DB.prepare(`INSERT INTO items (name,category,unit,min_shop,min_store,opening_shop,opening_store) VALUES (?,?,?,?,?,?,?) RETURNING *`).bind(name, String(a.category || 'General'), String(a.unit || 'pcs'), minShop, minStore, openingShop, openingStore).first();
       return json(result, 201);
     } catch (e) { if (String(e.message).includes('UNIQUE')) fail('An item with that name already exists.', 409); throw e; }
   }
@@ -49,6 +72,7 @@ async function route(request, env) {
     return json(result);
   }
   if (url.pathname === '/api/dashboard' && method === 'GET') {
+    await syncAlerts(env.DB);
     const rows = await balances(env.DB);
     const active = rows.filter((r) => r.active); const day = today();
     const counted = (await env.DB.prepare(`SELECT COUNT(*) AS c FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.count_date=? AND i.active=1`).bind(day).first()).c;
@@ -66,7 +90,8 @@ async function route(request, env) {
     const current = (await balances(env.DB)).find((r) => r.id === item.id);
     const source = direction === 'STORE_TO_SHOP' ? current.store : current.shop;
     if (qty > source) fail(`Only ${source} ${item.unit} available.`);
-    const date = a.date || today(); const user = env.STOCK_USER || 'Storekeeper';
+    const date = validDate(a.date); const user = env.STOCK_USER || 'Storekeeper';
+    if (a.request_id) { const duplicate = await env.DB.prepare('SELECT * FROM movements WHERE request_id=?').bind(String(a.request_id)).first(); if (duplicate) return json({ ...duplicate, duplicate: true }); }
     const result = await env.DB.batch([
       env.DB.prepare(`INSERT INTO movements (request_id,item_id,direction,qty,movement_date,note,user,shop_before,store_before) VALUES (?,?,?,?,?,?,?,?,?)`).bind(a.request_id || null, item.id, direction, qty, date, String(a.note || '').slice(0, 200) || null, user, current.shop, current.store),
       env.DB.prepare(`INSERT INTO audit_log (user,action,details) VALUES (?,?,?)`).bind(user, 'movement.create', JSON.stringify({ item: item.name, direction, qty, date }))
@@ -79,7 +104,7 @@ async function route(request, env) {
     if (!Number.isInteger(delta) || delta === 0) fail('Adjustment must be a non-zero whole number.');
     if (!['SHOP', 'STORE'].includes(location)) fail('Invalid location.');
     if (String(a.reason || '').trim().length < 3) fail('A reason is required.');
-    const item = await itemBy(env.DB, a.item_id ?? a.item); if (!item.active) fail('Item is inactive.');
+    const item = await itemBy(env.DB, a.item_id ?? a.item); if (!item.active) fail('Item is inactive.'); validDate(a.date);
     const current = (await balances(env.DB)).find((r) => r.id === item.id); const key = location === 'SHOP' ? 'shop' : 'store';
     if (current[key] + delta < 0) fail('This adjustment would make the balance negative.');
     const user = env.STOCK_USER || 'Storekeeper';
@@ -90,7 +115,7 @@ async function route(request, env) {
     return json({ ok: true, item: item.name, location, delta, balances: await balances(env.DB) });
   }
   if (url.pathname === '/api/counts' && method === 'POST') {
-    const a = await body(request); const date = a.date || today(); const lines = Array.isArray(a.lines) ? a.lines : [];
+    const a = await body(request); const date = validDate(a.date); const lines = Array.isArray(a.lines) ? a.lines : [];
     if (!lines.length) fail('No counts to save.');
     const user = env.STOCK_USER || 'Storekeeper'; const results = [];
     for (const line of lines) {
@@ -120,6 +145,7 @@ async function route(request, env) {
     return json({ range:{from,to:date}, balances:balancesNow, movements, adjustments, counts });
   }
   if (url.pathname === '/api/alerts' && method === 'GET') {
+    await syncAlerts(env.DB);
     const status = url.searchParams.get('status'); const q = status ? 'SELECT a.*,i.name AS item FROM alerts a JOIN items i ON i.id=a.item_id WHERE a.status=? ORDER BY a.id DESC' : 'SELECT a.*,i.name AS item FROM alerts a JOIN items i ON i.id=a.item_id WHERE a.status IN (\'OPEN\',\'ACKNOWLEDGED\') ORDER BY a.id DESC';
     return json((await env.DB.prepare(q).bind(...(status ? [status] : [])).all()).results);
   }
@@ -131,11 +157,14 @@ async function route(request, env) {
   }
   if (url.pathname.startsWith('/api/reports/') && method === 'GET') {
     const type = url.pathname.split('/').pop();
-    if (type === 'balances') return json(await balances(env.DB, url.searchParams.get('date')));
-    if (type === 'movements') return json((await env.DB.prepare(`SELECT m.*,i.name AS item FROM movements m JOIN items i ON i.id=m.item_id ORDER BY m.movement_date DESC,m.id DESC`).all()).results);
-    if (type === 'discrepancies') return json((await env.DB.prepare(`SELECT c.*,i.name AS item FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.status <> 'MATCHED' ORDER BY c.count_date DESC`).all()).results);
-    if (type === 'low-stock') return json((await balances(env.DB)).filter((r) => (r.shop < r.min_shop) || (r.store < r.min_store)));
-    return json([]);
+    let rows;
+    if (type === 'balances') rows = await balances(env.DB, url.searchParams.get('date'));
+    else if (type === 'movements') rows = (await env.DB.prepare(`SELECT m.*,i.name AS item FROM movements m JOIN items i ON i.id=m.item_id ORDER BY m.movement_date DESC,m.id DESC`).all()).results;
+    else if (type === 'discrepancies') rows = (await env.DB.prepare(`SELECT c.*,i.name AS item FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.status <> 'MATCHED' ORDER BY c.count_date DESC`).all()).results;
+    else if (type === 'low-stock') rows = (await balances(env.DB)).filter((r) => (r.shop < r.min_shop) || (r.store < r.min_store));
+    else rows = [];
+    if (url.searchParams.get('format') === 'csv') return new Response(csv(rows), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${type}.csv"` } });
+    return json(rows);
   }
   if (url.pathname === '/api/assistant' && method === 'POST') {
     if (!env.GOOGLE_API_KEY && !env.AI) fail('Assistant is not configured.', 503);
