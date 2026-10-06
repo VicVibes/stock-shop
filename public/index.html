@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Shop</title>
+<style>
+  :root { --bg:#f4f6fa; --card:#fff; --header-bg:rgba(255,255,255,.96); --ink:#172033; --muted:#667085; --line:#dde3ec; --accent:#2563eb; --accent-dark:#1643aa; --ok:#047857; --warn:#b45309; --bad:#b42318; --shadow:0 10px 30px rgba(23,32,51,.08); --input-bg:#fff; }
+  :root[data-theme="dark"] { --bg:#0f172a; --card:#172033; --header-bg:rgba(15,23,42,.96); --ink:#f4f6fa; --muted:#a7b0c0; --line:#334155; --accent:#60a5fa; --accent-dark:#3b82f6; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --shadow:0 10px 30px rgba(0,0,0,.22); --input-bg:#111827; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); transition:background .2s ease,color .2s ease; }
+  header { background:var(--header-bg); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; backdrop-filter:blur(12px); }
+  header .brand { display:flex; align-items:center; gap:10px; padding:10px 16px 0; cursor:pointer; width:max-content; border-radius:10px; }
+  header .brand:focus-visible { outline:3px solid rgba(37,99,235,.25); outline-offset:3px; }
+  .brand-logo { width:32px; height:32px; border-radius:9px; flex:0 0 auto; background:#fff; object-fit:contain; }
+  .brand-name { font-weight:800; font-size:18px; letter-spacing:-.02em; }
+  .brand-name span { color:var(--accent); }
+  .brand-upload-hint { position:fixed; top:0; left:-9999px; }
+  nav { display:flex; gap:4px; overflow-x:auto; padding:6px 10px 8px; scrollbar-width:none; }
+  nav::-webkit-scrollbar { display:none; }
+  nav a { white-space:nowrap; padding:7px 11px; border-radius:8px; color:var(--ink); text-decoration:none; }
+  nav a.on { background:var(--accent); color:#fff; }
+  nav a .n { background:var(--bad); color:#fff; border-radius:10px; padding:0 6px; font-size:12px; }
+  .quick-actions { display:flex; gap:6px; overflow-x:auto; padding:0 10px 10px; scrollbar-width:none; }
+  .quick-actions::-webkit-scrollbar { display:none; }
+  .quick-actions button { white-space:nowrap; padding:7px 12px; border:1px solid var(--line); border-radius:8px; background:var(--input-bg); color:var(--ink); cursor:pointer; font-size:13px; font-weight:650; box-shadow:0 1px 2px rgba(23,32,51,.04); }
+  .quick-actions button:hover { border-color:#a8c0f7; color:var(--accent-dark); }
+  .quick-actions button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  main { max-width:1120px; margin:0 auto; padding:24px 18px 32px; }
+  h1 { font-size:27px; margin:0 0 7px; letter-spacing:-.035em; } h1 small { color:var(--muted); font-weight:500; font-size:14px; letter-spacing:0; }
+  h2 { font-size:17px; margin:22px 0 8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px; box-shadow:var(--shadow); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:13px; padding:16px; text-decoration:none; color:inherit; box-shadow:0 3px 12px rgba(23,32,51,.04); transition:.15s ease; }
+  .stat:hover { transform:translateY(-2px); border-color:#b9c9ef; box-shadow:var(--shadow); }
+  .stat .v { font-size:25px; font-weight:800; letter-spacing:-.04em; } .stat .l { color:#475467; font-size:13px; font-weight:650; } .stat .s { color:var(--muted); font-size:12px; margin-top:4px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; min-height:40px; background:var(--accent); color:#fff; border:1px solid var(--accent); border-radius:9px; padding:9px 14px; font-size:14px; font-weight:700; text-decoration:none; cursor:pointer; transition:.15s ease; box-shadow:0 3px 8px rgba(37,99,235,.16); }
+  .btn:hover { background:var(--accent-dark); border-color:var(--accent-dark); }
+  .btn:disabled { opacity:.55; cursor:wait; transform:none; }
+  .btn.ghost { background:#fff; color:#344054; border-color:var(--line); box-shadow:none; }
+  .btn.ghost:hover { background:#f8fafc; color:var(--accent-dark); border-color:#a8c0f7; }
+  .btn.small { min-height:32px; padding:5px 9px; font-size:12px; }
+  .row-btns, .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0 12px; }
+  .row-btns, .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0 12px; }
+  input, select { font:inherit; padding:9px 10px; border:1px solid #cfd4dc; border-radius:9px; background:#fff; min-width:0; }
+  input[type=number] { width:130px; }
+  .form { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); align-items:end; }
+  .form label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); }
+  .form label input, .form label select { color:var(--ink); font-size:15px; background:var(--input-bg); }
+  .form .btn { justify-self:start; }
+  .seg { display:flex; gap:8px; } .seg label { flex-direction:row !important; align-items:center; color:var(--ink) !important; border:1px solid var(--line); border-radius:9px; padding:9px 12px; }
+  .scroll { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); }
+  th, td { padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; white-space:nowrap; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); background:#fafbfc; }
+  td input[type=number] { width:110px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; font-weight:600; }
+  .badge.matched, .badge.ok { background:#dcfce7; color:var(--ok); }
+  .badge.short, .badge.low { background:#fef3c7; color:var(--warn); }
+  .badge.excess { background:#dbeafe; color:#1e40af; }
+  .badge.out, .badge.discrepancy { background:#fee2e2; color:var(--bad); }
+  .badge.not { background:#eef0f3; color:var(--muted); }
+  .tag { font-size:11px; background:#eef0f3; color:var(--muted); border-radius:4px; padding:1px 5px; }
+  .tag.off { background:#fee2e2; color:var(--bad); }
+  .muted { color:var(--muted); } .small { font-size:12px; } .err { color:var(--bad); border-color:#fecaca; }
+  .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%) translateY(120px); background:#111827; color:#fff; padding:11px 16px; border-radius:10px; transition:transform .25s; z-index:20; max-width:90vw; }
+  .toast.show { transform:translateX(-50%) translateY(0); } .toast.err { background:var(--bad); } .toast.ok { background:var(--ok); }
+  .chat { display:flex; flex-direction:column; gap:9px; max-height:55vh; overflow-y:auto; margin-bottom:10px; padding:4px 2px; }
+  .bubble { padding:11px 13px; border-radius:13px; max-width:88%; white-space:pre-wrap; line-height:1.45; }
+  .bubble.user { background:var(--accent); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+  .bubble.bot { background:#eef2f8; color:#253247; align-self:flex-start; border-bottom-left-radius:4px; }
+  .note { padding:12px 14px; border-radius:10px; background:#eff6ff; border:1px solid:#cfe0ff; color:#294270; }
+  .ai-status { display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border-radius:20px; background:#ecfdf5; color:#076b4b; font-size:12px; font-weight:700; }
+  .ai-status::before { content:''; width:7px; height:7px; border-radius:50%; background:#10b981; }
+  .view-only { display:inline-flex; align-items:center; gap:6px; padding:6px 9px; border-radius:20px; background:#eff6ff; color:#1d4ed8; font-size:12px; font-weight:700; }
+  .view-only::before { content:'✓'; display:grid; place-items:center; width:16px; height:16px; border-radius:50%; background:#2563eb; color:#fff; font-size:10px; }
+  .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:14px 0; }
+  .summary-grid .stat { min-height:108px; }
+  .summary-grid .summary-label { color:var(--muted); font-size:12px; }
+  .count-tabs { display:flex; gap:6px; padding:4px; margin:12px 0; border:1px solid var(--line); border-radius:11px; background:#eef2f7; width:max-content; }
+  .count-tab { border:0; background:transparent; color:#475467; padding:8px 14px; border-radius:8px; font-weight:700; cursor:pointer; }
+  .count-tab.active { background:#fff; color:var(--accent-dark); box-shadow:0 2px 8px rgba(23,32,51,.09); }
+  .count-panel[hidden] { display:none; }
+  .count-file { padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:#f8fafc; }
+  .count-file h3 { margin:0 0 4px; font-size:14px; }
+  .count-file p { margin:0; color:var(--muted); font-size:12px; }
+  .count-table { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .count-table table { border-collapse:separate; border-spacing:0; }
+  .count-table th { padding:11px 13px; background:#f8fafc; }
+  .count-table td { padding:10px 13px; }
+  .count-table td:nth-child(3) input { max-width:110px; }
+  .count-table .physical-input { width:104px; }
+  .count-correction-note { color:#b45309; font-size:12px; font-weight:650; }
+  @media (max-width:640px) {
+    header .brand { padding:7px 12px 3px; font-size:16px; }
+    header .brand-logo { width:28px; height:28px; }
+    nav { padding:6px 10px 8px; }
+    nav a { padding:7px 10px; font-size:13px; }
+    main { padding:18px 12px 28px; }
+    h1 { font-size:24px; }
+    h2 { font-size:16px; }
+    .card { padding:14px; border-radius:12px; }
+    .grid, .summary-grid { grid-template-columns:1fr 1fr; gap:9px; }
+    .stat { padding:13px; }
+    .stat .v { font-size:22px; }
+    .toolbar, .row-btns { gap:7px; }
+    .toolbar > *, .row-btns > * { flex:1 1 120px; }
+    .toolbar .btn, .row-btns .btn { width:100%; min-height:44px; }
+    .form { grid-template-columns:1fr; gap:14px; }
+    .form label input, .form label select, .form input, .form select { width:100%; min-height:44px; }
+    .seg { flex-direction:column; gap:7px; }
+    .seg label { width:100%; min-height:44px; }
+    input[type=number], input[type=date], input[type=month], select { min-height:44px; }
+    input[type=number] { width:100%; }
+    .count-tabs { width:100%; }
+    .count-tab { flex:1; min-height:40px; }
+    .count-file { padding:12px 13px; }
+    .count-table td { padding:9px 8px; }
+    .count-table .physical-input { width:100%; min-width:95px; }
+    .btn { min-height:44px; }
+    .bubble { max-width:94%; }
+    .chat { max-height:70vh; }
+  }
+  @media (max-width:420px) {
+    .grid, .summary-grid { grid-template-columns:1fr; }
+    .stat { min-height:88px; }
+    .toolbar > *, .row-btns > * { flex-basis:100%; }
+    .count-table { border-radius:9px; }
+  }
+  @media print {
+    header, nav, .quick-actions, .toolbar, .count-tabs, .count-correction-note, .toast, .btn, .count-panel[hidden] { display:none !important; }
+    body { background:#fff; color:#111827; font-size:11pt; }
+    main { max-width:none; padding:0; margin:0; }
+    #app { width:100%; }
+    h1 { font-size:19pt; margin-bottom:8px; }
+    .count-file, .count-table, .scroll, .card { border:0; box-shadow:none; border-radius:0; }
+    .count-file { background:#fff; border:0; padding:0 0 10px; }
+    .count-table { border:0; overflow:visible; }
+    table { width:100%; table-layout:fixed; }
+    th { background:#eef2f7 !important; color:#111827 !important; font-size:8pt; }
+    td { border-bottom:1px solid #cfd4dc; padding:5px 7px; white-space:nowrap; }
+    input { border:0; padding:0; background:transparent; color:#111827; }
+    .count-panel { display:block !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand" id="brand" role="button" tabindex="0" aria-label="Click to upload a new Barrytech logo" title="Click Barrytech to upload a logo">
+    <img class="brand-logo" id="brand-logo" src="/logo.svg" alt="Barrytech logo">
+    <div class="brand-name">Barry<span>tech</span></div>
+  </div>
+  <input class="brand-upload-hint" id="logo-input" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml">
+  <nav>
+    <a data-r="dashboard" href="#/dashboard">Dashboard</a>
+    <a data-r="shop" href="#/shop">Shop Stock</a>
+    <a data-r="store" href="#/store">Store Stock</a>
+    <a data-r="settings" href="#/settings">Settings</a>
+  </nav>
+  <div class="quick-actions" aria-label="Quick actions">
+    <button type="button" data-action="move">Move stock</button>
+    <button type="button" data-action="count">Daily count</button>
+    <button type="button" data-action="reports">Report</button>
+    <button type="button" data-action="history">History & summaries</button>
+    <button type="button" data-action="monthly">Monthly account</button>
+    <button type="button" data-action="assistant">Assistant</button>
+  </div>
+</header>
+<main id="app"></main>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const localDate = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const today = () => localDate();
+const monthStart = () => today().slice(0, 8) + '01';
+const qp = () => Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''));
+const dirLabel = (d) => (d === 'STORE_TO_SHOP' ? 'Store → Shop' : 'Shop → Store');
+const logoStorageKey = 'barrytech-logo';
+const themeStorageKey = 'barrytech-theme';
+const logoInput = $('#logo-input');
+const logoImage = $('#brand-logo');
+const brand = $('#brand');
+
+function openLogoUploader() {
+  logoInput.click();
+}
+
+function loadSavedLogo() {
+  const saved = localStorage.getItem(logoStorageKey);
+  if (saved) logoImage.src = saved;
+}
+
+function applyTheme(theme) {
+  const resolved = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = resolved;
+  localStorage.setItem(themeStorageKey, resolved);
+  const toggle = $('#theme-toggle');
+  if (toggle) {
+    toggle.checked = resolved === 'dark';
+    toggle.dataset.label = resolved === 'dark' ? 'Dark mode enabled' : 'Light mode enabled';
+  }
+}
+
+function loadTheme() {
+  const saved = localStorage.getItem(themeStorageKey);
+  applyTheme(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+}
+
+function uploadLogo(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return toast('Choose a PNG, JPG, GIF, or SVG image.', false);
+  if (file.size > 2 * 1024 * 1024) return toast('Logo must be smaller than 2 MB.', false);
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result);
+    logoImage.src = dataUrl;
+    localStorage.setItem(logoStorageKey, dataUrl);
+    toast('Barrytech logo uploaded');
+  };
+  reader.onerror = () => toast('The logo could not be read.', false);
+  reader.readAsDataURL(file);
+}
+
+brand.onclick = openLogoUploader;
+brand.onkeydown = (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    openLogoUploader();
+  }
+};
+logoInput.onchange = (e) => {
+  uploadLogo(e.target.files[0]);
+  e.target.value = '';
+};
+loadSavedLogo();
+loadTheme();
+
+async function api(path, opts = {}) {
+  const r = await fetch('/api' + path, {
+    ...opts,
+    headers: { 'content-type': 'application/json' },
+    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
+  return j;
+}
+function toast(msg, ok = true) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'ok' : 'err');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => (t.className = 'toast'), 3500);
+}
+// Columns: [label, key | (row) => html]. Strings are escaped; functions must escape their own text.
+function table(rows, cols) {
+  if (!rows || !rows.length) return '<div class="card muted">Nothing to show yet.</div>';
+  return `<div class="scroll"><table><thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map((r) => `<tr>${cols.map((c) => {
+      const v = typeof c[1] === 'function' ? c[1](r) : esc(r[c[1]]);
+      return `<td>${v ?? ''}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+const stat = (label, value, sub, href) => {
+  const inner = `<div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub || ''}</div>`;
+  return href ? `<a class="stat" href="${href}">${inner}</a>` : `<div class="stat">${inner}</div>`;
+};
+const statusOf = (qty, min) => (qty <= 0 && min > 0 ? 'OUT' : qty < min ? 'LOW' : 'OK');
+const badge = (s) => `<span class="badge ${s.toLowerCase().replace(/ /g, '')}">${s}</span>`;
+
+// ---------- views ----------
+async function dashboard() {
+  const d = await api('/dashboard');
+  const a = d.alerts || {};
+  const alertTotal = (a.LOW || 0) + (a.OUT || 0) + (a.DISCREPANCY || 0);
+  $('#app').innerHTML = `
+    <h1>Dashboard <small>${esc(d.date)}</small></h1>
+    <div class="grid">
+      ${stat('Shop stock', d.shop_total, `units across ${d.active_items} active items`, '#/shop')}
+      ${stat('Store stock', d.store_total, 'units', '#/store')}
+      ${stat('Alerts', alertTotal, `${a.OUT || 0} out · ${a.LOW || 0} low · ${a.DISCREPANCY || 0} discrepancies`, '#/alerts')}
+      ${stat('Movements today', d.moves_today, '', '#/move')}
+      ${stat('Daily count', `${d.count.counted}/${d.count.total}`, 'items counted today', '#/count')}
+    </div>
+    <div class="row-btns">
+      <a class="btn" href="#/move">Move stock</a>
+      <a class="btn" href="#/count">Daily count</a>
+    </div>
+    <h2>Recent movements</h2>
+    ${table(d.recent, [['Date', 'movement_date'], ['Item', 'item'], ['Direction', (r) => esc(dirLabel(r.direction))],
+      ['Qty', 'qty'], ['By', 'user'], ['Note', 'note']])}`;
+}
+
+async function stockView(loc) {
+  const key = loc === 'SHOP' ? 'shop' : 'store';
+  const minKey = loc === 'SHOP' ? 'min_shop' : 'min_store';
+  const rows = (await api('/balances')).filter((r) => r.active);
+  $('#app').innerHTML = `
+    <h1>${loc === 'SHOP' ? 'Shop Stock' : 'Store Stock'}</h1>
+    <div class="toolbar"><input id="q" placeholder="Search items…">
+      <a class="btn ghost" href="/api/reports/balances?loc=${loc}&format=csv">Download CSV</a>
+      <button class="btn ghost" onclick="print()">Print</button></div>
+    <div id="tbl"></div>`;
+  const draw = () => {
+    const q = $('#q').value.trim().toLowerCase();
+    const list = rows.filter((r) => r.name.toLowerCase().includes(q));
+    $('#tbl').innerHTML = table(list, [
+      ['Item', (r) => esc(r.name) + (r.is_sample ? ' <span class="tag">SAMPLE</span>' : '')],
+      ['Category', 'category'],
+      ['Qty', (r) => `<b>${r[key]}</b> ${esc(r.unit)}`],
+      ['Minimum', (r) => r[minKey]],
+      ['Status', (r) => badge(statusOf(r[key], r[minKey]))],
+      ['', (r) => `<a class="btn small ghost" href="#/move?id=${r.id}&dir=${loc === 'SHOP' ? 'STORE_TO_SHOP' : 'SHOP_TO_STORE'}">Move</a>`],
+    ]);
+  };
+  $('#q').oninput = draw;
+  draw();
+}
+
+let moveItems = [];
+const findMoveItem = (text) => moveItems.find((i) => i.name.toLowerCase() === String(text).trim().toLowerCase());
+async function move() {
+  const p = qp();
+  moveItems = (await api('/balances')).filter((r) => r.active);
+  const pre = moveItems.find((i) => String(i.id) === p.id);
+  $('#app').innerHTML = `
+    <h1>Move stock</h1>
+    <form id="mv" class="card form">
+      <label>Date<input type="date" name="date" value="${today()}" max="${today()}" required></label>
+      <label>Item<input id="itemq" list="itemlist" placeholder="Type to search…" value="${esc(pre ? pre.name : '')}" required></label>
+      <datalist id="itemlist">${moveItems.map((i) => `<option value="${esc(i.name)}"></option>`).join('')}</datalist>
+      <div><div class="small muted">Direction</div><div class="seg">
+        <label><input type="radio" name="direction" value="STORE_TO_SHOP" ${p.dir !== 'SHOP_TO_STORE' ? 'checked' : ''}> Store → Shop</label>
+        <label><input type="radio" name="direction" value="SHOP_TO_STORE" ${p.dir === 'SHOP_TO_STORE' ? 'checked' : ''}> Shop → Store</label></div></div>
+      <label>Quantity<input type="number" name="qty" min="1" step="1" required></label>
+      <label>Note (optional)<input name="note" maxlength="200"></label>
+      <div id="avail" class="muted" style="grid-column:1/-1"></div>
+      <button class="btn" id="go" type="submit">Record transfer</button>
+    </form>`;
+  const form = $('#mv');
+  const update = () => {
+    const it = findMoveItem($('#itemq').value);
+    const avail = $('#avail');
+    if (avail) avail.textContent = it ? `Available now: Store ${it.store} · Shop ${it.shop} ${it.unit}` : '';
+  };
+  form.oninput = update;
+  update();
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const it = findMoveItem($('#itemq').value);
+    if (!it) return toast('Pick an item from the list', false);
+    const fd = new FormData(form);
+    form.dataset.rid = form.dataset.rid || crypto.randomUUID(); // same id on retry = no duplicate
+    const btn = $('#go');
+    btn.disabled = true;
+    try {
+      const r = await api('/movements', { method: 'POST', body: {
+        item_id: it.id, direction: fd.get('direction'), qty: fd.get('qty'),
+        date: fd.get('date'), note: fd.get('note'), request_id: form.dataset.rid } });
+      toast(r.duplicate ? 'Already recorded. Duplicate blocked.' : 'Transfer recorded');
+      delete form.dataset.rid;
+      form.reset();
+      form.date.value = today();
+      $('#itemq').value = '';
+      update();
+    } catch (err) {
+      toast(err.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+async function count() {
+  const date = qp().date || today();
+  const items = (await api(`/balances?asOf=${date}`)).filter((r) => r.active);
+  const existing = Object.fromEntries((await api(`/counts?date=${date}`)).map((c) => [c.item_id, c]));
+  const renderRows = (rows, selector, correction = false) => rows.map((r) => {
+    const saved = existing[r.id];
+    const value = correction ? (saved ? saved.physical_qty : '') : (saved ? saved.physical_qty : '');
+    return `<tr data-id="${r.id}">
+      <td>${esc(r.name)} <span class="muted small">${esc(r.unit)}</span></td>
+      <td class="sys">${r.shop}</td>
+      <td><input type="number" min="0" step="1" class="phys physical-input" value="${value}" ${correction ? '' : 'aria-label="Physical shop count'} ${correction ? 'disabled' : ''}></td>
+      <td class="diff">—</td><td class="st"></td></tr>`;
+  }).join('');
+  $('#app').innerHTML = `
+    <h1>Daily Shop count <small>${date}</small></h1>
+    <div class="count-file"><h3>Shop floor count</h3><p>Enter the physical quantity or correct a previously saved count. Stock balances are never changed.</p></div>
+    <div class="count-tabs" role="tablist" aria-label="Daily count options">
+      <button class="count-tab active" id="count-tab" role="tab" aria-selected="true">Count</button>
+      <button class="count-tab" id="correction-tab" role="tab" aria-selected="false">Correction</button>
+    </div>
+    <div class="count-panel" id="count-panel" role="tabpanel">
+      <div class="toolbar">
+        <input type="date" id="cd" value="${date}" max="${today()}">
+        <input id="q" placeholder="Search items…">
+        <button class="btn" id="save">Save counts</button>
+        <button class="btn ghost" id="print-count">Print daily Shop count</button>
+      </div>
+      <div class="count-table"><table><thead><tr><th>Item</th><th>System</th><th>Physical</th><th>Difference</th><th>Status</th></tr></thead>
+      <tbody id="ct">${renderRows(items, '#ct')}</tbody></table></div>
+    </div>
+    <div class="count-panel" id="correction-panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <span class="count-correction-note">Editor: corrections update the saved count only</span>
+        <button class="btn ghost" id="save-correction">Save correction</button>
+        <button class="btn ghost" id="print-correction">Print corrected count</button>
+      </div>
+      <div class="count-table"><table><thead><tr><th>Item</th><th>System</th><th>Saved</th><th>Corrected physical</th><th>Difference</th><th>Status</th></tr></thead>
+      <tbody id="correction-ct">${items.map((r) => {
+        const saved = existing[r.id];
+        return `<tr data-id="${r.id}">
+          <td>${esc(r.name)} <span class="muted small">${esc(r.unit)}</span></td>
+          <td class="sys">${r.shop}</td>
+          <td>${saved ? saved.physical_qty : '—'}</td>
+          <td><input type="number" min="0" step="1" class="phys physical-input" value="${saved ? saved.physical_qty : ''}" aria-label="Correct physical shop count"></td>
+          <td class="diff">—</td><td class="st"></td></tr>`;
+      }).join('')}</tbody></table></div>
+    </div>`;
+
+  const bindRecalc = (body) => {
+    body.querySelectorAll('tr').forEach((tr) => {
+      const field = tr.querySelector('.phys');
+      if (field) field.oninput = () => recalc(tr);
+      recalc(tr);
+    });
+  };
+  const recalc = (tr) => {
+    const sysCell = tr.querySelector('.sys');
+    const physicalCell = tr.querySelector('.phys');
+    const diffCell = tr.querySelector('.diff');
+    const statusCell = tr.querySelector('.st');
+    if (!sysCell || !physicalCell || !diffCell || !statusCell) return;
+    const sys = Number.parseInt(sysCell.textContent || '0', 10);
+    const v = physicalCell.value.trim();
+    if (v === '') { diffCell.textContent = '—'; statusCell.innerHTML = ''; return; }
+    const diff = Number(v) - sys;
+    diffCell.textContent = (diff > 0 ? '+' : '') + diff;
+    const s = diff === 0 ? 'MATCHED' : diff < 0 ? 'SHORT' : 'EXCESS';
+    statusCell.innerHTML = badge(s);
+  };
+  const body = $('#ct');
+  const correctionBody = $('#correction-ct');
+  bindRecalc(body);
+  bindRecalc(correctionBody, true);
+  $('#q').oninput = () => {
+    const q = $('#q').value.trim().toLowerCase();
+    body.querySelectorAll('tr').forEach((tr) => {
+      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  };
+  $('#cd').onchange = (e) => (location.hash = `#/count?date=${e.target.value}`);
+  $('#count-tab').onclick = () => {
+    $('#count-panel').hidden = false;
+    $('#correction-panel').hidden = true;
+    $('#count-tab').classList.add('active');
+    $('#correction-tab').classList.remove('active');
+    $('#count-tab').setAttribute('aria-selected', 'true');
+    $('#correction-tab').setAttribute('aria-selected', 'false');
+  };
+  $('#correction-tab').onclick = () => {
+    $('#count-panel').hidden = true;
+    $('#correction-panel').hidden = false;
+    $('#count-tab').classList.remove('active');
+    $('#correction-tab').classList.add('active');
+    $('#count-tab').setAttribute('aria-selected', 'false');
+    $('#correction-tab').setAttribute('aria-selected', 'true');
+  };
+  $('#print-count').onclick = () => print();
+  $('#print-correction').onclick = () => print();
+  const saveCounts = async (targetBody, action) => {
+    const lines = [...targetBody.querySelectorAll('tr')]
+      .filter((tr) => tr.querySelector('.phys').value !== '')
+      .map((tr) => ({ item_id: Number(tr.dataset.id), physical: tr.querySelector('.phys').value }));
+    if (!lines.length) return toast('Enter at least one count', false);
+    try {
+      const r = await api('/counts', { method: 'POST', body: { date, lines } });
+      const bad = r.results.filter((x) => x.error);
+      const short = r.results.filter((x) => x.status && x.status !== 'MATCHED').length;
+      toast(bad.length ? `Saved with ${bad.length} error(s)` : `${action} saved (${short} discrepancies)`, !bad.length);
+      if (!bad.length) setTimeout(() => count(), 500);
+    } catch (e) { toast(e.message, false); }
+  };
+  $('#save').onclick = () => saveCounts(body, 'Count');
+  $('#save-correction').onclick = () => saveCounts(correctionBody, 'Correction');
+}
+
+async function monthly() {
+  const m = qp().month || today().slice(0, 7);
+  const d = await api(`/monthly?month=${m}`);
+  const names = d.rows.map((r) => `<option value="${esc(r.item)}"></option>`).join('');
+  $('#app').innerHTML = `
+    <h1>Monthly stock account <small>${m}</small></h1>
+    <div class="toolbar"><input type="month" id="mm" value="${m}">
+      <a class="btn ghost" href="/api/reports/monthly?month=${m}&format=csv">Download CSV</a>
+      <button class="btn ghost" onclick="print()">Print</button></div>
+    ${table([...d.rows, d.totals], [
+      ['Item', (r) => esc(r.item)], ['Open Shop', 'open_shop'], ['Open Store', 'open_store'],
+      ['To Shop', 'to_shop'], ['To Store', 'to_store'], ['Adj Shop', 'adj_shop'], ['Adj Store', 'adj_store'],
+      ['Close Shop', 'close_shop'], ['Close Store', 'close_store'],
+    ])}
+    <h2>Reconciliation adjustment</h2>
+    <p class="muted small">Use this only when a physical stock difference has been confirmed. A reason is required and it is recorded permanently.</p>
+    <form id="adj" class="card form">
+      <label>Date<input type="date" name="date" value="${today()}" max="${today()}" required></label>
+      <label>Item<input name="item" list="adjitems" required></label>
+      <datalist id="adjitems">${names}</datalist>
+      <label>Location<select name="location"><option value="SHOP">Shop</option><option value="STORE">Store</option></select></label>
+      <label>Change (+ or −)<input type="number" name="delta" step="1" required></label>
+      <label>Reason (required)<input name="reason" minlength="3" maxlength="200" required></label>
+      <button class="btn" type="submit">Post adjustment</button>
+    </form>`;
+  $('#mm').onchange = (e) => (location.hash = `#/monthly?month=${e.target.value}`);
+  $('#adj').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await api('/adjustments', { method: 'POST', body: Object.fromEntries(fd) });
+      toast('Adjustment posted');
+      monthly();
+    } catch (err) { toast(err.message, false); }
+  };
+}
+
+const itemPage = { items: [] };
+async function items() {
+  itemPage.items = await api('/items?all=1');
+  $('#app').innerHTML = `
+    <h1>Items</h1>
+    <form id="newitem" class="card form">
+      <label>Name<input name="name" required></label>
+      <label>Category<input name="category" value="General"></label>
+      <label>Unit<input name="unit" value="pcs"></label>
+      <label>Opening Shop<input name="opening_shop" type="number" min="0" value="0"></label>
+      <label>Opening Store<input name="opening_store" type="number" min="0" value="0"></label>
+      <label>Minimum Shop<input name="min_shop" type="number" min="0" value="0"></label>
+      <label>Minimum Store<input name="min_store" type="number" min="0" value="0"></label>
+      <button class="btn" type="submit">Add item</button>
+    </form>
+    ${table(itemPage.items, [
+      ['Item', (r) => esc(r.name) + (r.is_sample ? ' <span class="tag">SAMPLE</span>' : '') + (r.active ? '' : ' <span class="tag off">INACTIVE</span>')],
+      ['Category', 'category'], ['Unit', 'unit'], ['Min Shop', 'min_shop'], ['Min Store', 'min_store'],
+      ['', (r) => `<button class="btn small ghost" onclick="editItem(${r.id})">Edit minimums</button>
+        <button class="btn small ghost" onclick="toggleItem(${r.id}, ${r.active ? 0 : 1})">${r.active ? 'Deactivate' : 'Reactivate'}</button>`],
+    ])}`;
+  $('#newitem').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/items', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) });
+      toast('Item added');
+      items();
+    } catch (err) { toast(err.message, false); }
+  };
+}
+async function editItem(id) {
+  const it = itemPage.items.find((i) => i.id === id);
+  const min_shop = prompt('Shop minimum', it.min_shop);
+  if (min_shop === null) return;
+  const min_store = prompt('Store minimum', it.min_store);
+  if (min_store === null) return;
+  try { await api(`/items/${id}`, { method: 'PATCH', body: { min_shop, min_store } }); toast('Saved'); items(); }
+  catch (e) { toast(e.message, false); }
+}
+async function toggleItem(id, active) {
+  try { await api(`/items/${id}`, { method: 'PATCH', body: { active: !!active } }); toast(active ? 'Reactivated' : 'Deactivated. History is kept.'); items(); }
+  catch (e) { toast(e.message, false); }
+}
+
+const REPORTS = {
+  'daily-shop': 'Daily Shop', movements: 'Movements', 'low-stock': 'Low stock',
+  discrepancies: 'Count discrepancies', monthly: 'Monthly account', balances: 'Balances (current)',
+};
+async function reports() {
+  const p = qp();
+  const type = p.type || 'daily-shop';
+  const v = { date: p.date || today(), from: p.from || monthStart(), to: p.to || today(), month: p.month || today().slice(0, 7) };
+  const rows = await api(`/reports/${type}?${new URLSearchParams(v)}`);
+  const qs = new URLSearchParams(v).toString();
+  $('#app').innerHTML = `
+    <h1>Reports</h1>
+    <div class="toolbar">
+      <select id="rt">${Object.entries(REPORTS).map(([k, l]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <span class="small muted">Date</span><input type="date" id="rd" value="${v.date}">
+      <span class="small muted">From</span><input type="date" id="rf" value="${v.from}">
+      <span class="small muted">To</span><input type="date" id="rto" value="${v.to}">
+      <span class="small muted">Month</span><input type="month" id="rm" value="${v.month}">
+    </div>
+    <div class="toolbar">
+      <a class="btn ghost" href="/api/reports/${type}?${qs}&format=csv">Download CSV</a>
+      <button class="btn ghost" onclick="print()">Print</button>
+    </div>
+    <p class="small muted">Only the date fields that apply to the chosen report are used.</p>
+    <div class="printable">${table(rows, Object.keys(rows[0] || {}).map((k) => [k.replace(/_/g, ' '), k]))}</div>`;
+  const go = () => (location.hash = `#/reports?type=${$('#rt').value}&date=${$('#rd').value}&from=${$('#rf').value}&to=${$('#rto').value}&month=${$('#rm').value}`);
+  ['rt', 'rd', 'rf', 'rto', 'rm'].forEach((id) => ($('#' + id).onchange = go));
+}
+
+async function history() {
+  const requestedPeriod = String(qp().period || 'month').toLowerCase();
+  const p = ['week', 'month', 'quarter'].includes(requestedPeriod) ? requestedPeriod : 'month';
+  const date = qp().date || today();
+  const d = await api(`/history?period=${p}&date=${date}`);
+  const periodLabels = { week: 'This week', month: 'This month', quarter: 'This quarter' };
+  const periodLabel = periodLabels[p];
+  const shareUrl = `${location.origin}${location.pathname}#/history?period=${encodeURIComponent(p)}&date=${date}`;
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast('View-only link copied');
+    } catch {
+      location.href = shareUrl;
+    }
+  };
+  $('#app').innerHTML = `
+    <h1>History & summaries <small>${periodLabel} · ${d.range.from} to ${d.range.to}</small></h1>
+    <div class="toolbar">
+      <span class="view-only">View only</span>
+      <select id="history-period"><option value="week" ${p === 'week' ? 'selected' : ''}>This week</option><option value="month" ${p === 'month' ? 'selected' : ''}>This month</option><option value="quarter" ${p === 'quarter' ? 'selected' : ''}>This quarter</option></select>
+      <input type="date" id="history-date" value="${date}">
+      <button class="btn ghost" id="copy-link">Copy view-only link</button>
+      <button class="btn ghost" onclick="print()">Print</button>
+    </div>
+    <p class="muted small">This page is read-only. Recipient links open the same period summary without access to change stock or records.</p>
+    <div class="summary-grid">
+      <div class="stat"><div class="summary-label">Movements</div><div class="v">${d.movements.length}</div><div class="s">recorded in period</div></div>
+      <div class="stat"><div class="summary-label">Adjustments</div><div class="v">${d.adjustments.length}</div><div class="s">confirmed changes</div></div>
+      <div class="stat"><div class="summary-label">Count records</div><div class="v">${d.counts.length}</div><div class="s">physical recounts</div></div>
+      <div class="stat"><div class="summary-label">Active stock items</div><div class="v">${d.balances.length}</div><div class="s">from current balances</div></div>
+    </div>
+    <h2>Stock balances</h2>
+    ${table(d.balances, [['Item', 'item'], ['Category', 'category'], ['Shop', 'shop'], ['Store', 'store'], ['Unit', 'unit'], ['Min Shop', 'min_shop'], ['Min Store', 'min_store']])}
+    <h2>Movements</h2>
+    ${table(d.movements, [['Date', 'date'], ['Item', 'item'], ['Direction', 'direction'], ['Qty', 'qty'], ['Note', 'note'], ['By', 'user']])}
+    <h2>Adjustments</h2>
+    ${table(d.adjustments, [['Date', 'date'], ['Item', 'item'], ['Location', 'location'], ['Change', 'delta'], ['Reason', 'reason'], ['By', 'user']])}
+    <h2>Daily counts</h2>
+    ${table(d.counts, [['Date', 'date'], ['Item', 'item'], ['System', 'system_qty'], ['Physical', 'physical_qty'], ['Difference', 'difference'], ['Status', 'status'], ['By', 'user']])}`;
+  $('#history-period').onchange = (e) => (location.hash = `#/history?period=${e.target.value}&date=${date}`);
+  $('#history-date').onchange = (e) => (location.hash = `#/history?period=${p}&date=${e.target.value}`);
+  $('#copy-link').onclick = copyLink;
+}
+
+async function alerts() {
+  const list = await api('/alerts');
+  $('#app').innerHTML = `
+    <h1>Alerts</h1>
+    <p class="muted small">Low and out-of-stock alerts clear automatically when stock recovers. Count discrepancies clear on a matching recount or after you review them with a reason.</p>
+    ${table(list, [
+      ['Kind', (r) => badge(r.kind)],
+      ['Message', (r) => esc(r.message)],
+      ['Status', 'status'],
+      ['Since', 'created_at'],
+      ['Actions', (r) => `${r.kind !== 'DISCREPANCY' && r.location === 'SHOP' ? `<a class="btn small" href="#/move?id=${r.item_id}&dir=STORE_TO_SHOP">Restock</a> ` : ''}
+        ${r.status === 'OPEN' ? `<button class="btn small ghost" onclick="review(${r.id}, 'acknowledge')">Acknowledge</button> ` : ''}
+        <button class="btn small ghost" onclick="review(${r.id}, 'clear')">Clear</button>`],
+    ])}`;
+}
+async function review(id, action) {
+  let note = '';
+  if (action === 'clear') {
+    note = prompt('Reason for clearing this alert (required)');
+    if (!note || note.trim().length < 3) return toast('A reason is required', false);
+  }
+  try { await api(`/alerts/${id}/review`, { method: 'POST', body: { action, note } }); toast('Updated'); alerts(); }
+  catch (e) { toast(e.message, false); }
+}
+
+let chatHistory = [];
+function renderChat() {
+  $('#chat').innerHTML = chatHistory.map((m) => `<div class="bubble ${m.role === 'user' ? 'user' : 'bot'}">${esc(m.content)}</div>`).join('')
+    || '<div class="muted small">Try: "move 20 bottled water to shop", "what is low?", "count sugar at 7 today"</div>';
+  $('#chat').scrollTop = 1e9;
+}
+async function assistant() {
+  const status = await api('/status');
+  $('#app').innerHTML = `
+    <h1>Assistant <small>${status.aiProvider === 'local' ? 'Local AI' : 'Google Gemini'}</small></h1>
+    <div class="note"><strong>How to use:</strong> Ask in plain English, for example “move 20 bottled water to shop” or “show me this month’s stock account”. The assistant uses the same stock rules as the UI and will never change stock without a valid action.</div>
+    <div class="card">
+      <div class="toolbar"><span class="ai-status">${status.ai ? `AI connected (${status.aiProvider})` : 'AI is disabled'}</span>${status.ai ? '' : '<span class="small muted">Set LOCAL_AI_URL or GOOGLE_API_KEY in the server environment, then restart.</span>'}</div>
+      <div id="chat" class="chat"></div>
+      <form id="ask" class="toolbar"><input name="m" placeholder="Ask about stock, counts, reports or adjustments…" required style="flex:1; min-width:220px" autocomplete="off"><button class="btn" id="send">Send</button></form>
+    </div>`;
+  renderChat();
+  $('#ask').onsubmit = async (e) => {
+    e.preventDefault();
+    const input = e.target.m;
+    const message = input.value.trim();
+    if (!message) return;
+    chatHistory.push({ role: 'user', content: message });
+    renderChat();
+    input.value = '';
+    $('#send').disabled = true;
+    try {
+      const r = await api('/assistant', { method: 'POST', body: { message, history: chatHistory.slice(-12, -1) } });
+      chatHistory.push({ role: 'assistant', content: r.reply });
+      if (r.actions && r.actions.length) toast(`${r.actions.length} action(s) completed`);
+    } catch (err) {
+      chatHistory.push({ role: 'assistant', content: err.message });
+    } finally {
+      $('#send').disabled = false;
+      renderChat();
+    }
+  };
+}
+
+async function settings() {
+  const s = await api('/status');
+  $('#app').innerHTML = `
+    <h1>Settings</h1>
+    <div class="card">
+      <h2>Appearance</h2>
+      <label class="seg" style="width:max-content; margin-bottom:8px">
+        <input id="theme-toggle" type="checkbox" aria-label="Enable dark mode">
+        <span>Dark mode</span>
+      </label>
+      <p class="muted small">Theme preference is saved in this browser and applied immediately.</p>
+      <p><b>Storekeeper:</b> ${esc(s.user)}</p>
+      <p><b>AI assistant:</b> ${s.ai ? `Connected to ${s.aiProvider === 'local' ? 'local AI' : 'Google Gemini'}` : 'Not configured'}</p>
+      ${s.aiProvider === 'local' ? `<p class="muted small">Local AI: ${esc(s.localAiModel)}</p>` : ''}
+      <p class="muted small">Configuration is managed on the server. In-app alerts are always active.</p>
+    </div>`;
+  $('#theme-toggle').onchange = (e) => applyTheme(e.target.checked ? 'dark' : 'light');
+  applyTheme(localStorage.getItem(themeStorageKey) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+}
+
+const views = { dashboard, shop: () => stockView('SHOP'), store: () => stockView('STORE'), move, count, monthly, items, history, reports, alerts, assistant, settings };
+async function route() {
+  const name = (location.hash.replace('#/', '').split('?')[0]) || 'dashboard';
+  const fn = views[name] || views.dashboard;
+  document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === name));
+  document.querySelectorAll('[data-action]').forEach((button) => button.classList.toggle('on', button.dataset.action === name));
+  $('#app').innerHTML = '<p class="muted">Loading…</p>';
+  try { await fn(); }
+  catch (e) { $('#app').innerHTML = `<div class="card err">${esc(e.message)}</div>`; }
+}
+window.addEventListener('hashchange', route);
+document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => {
+  location.hash = `#/${button.dataset.action}`;
+}));
+route();
+</script>
+</body>
+</html>

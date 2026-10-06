@@ -1,0 +1,19 @@
+node_modules/
+
+# Local database and SQLite sidecar files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and local test output
+*.log
+coverage/
+
+# Temporary developer scripts
+tmp-*.js
+debug-*.js

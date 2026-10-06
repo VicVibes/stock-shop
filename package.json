@@ -1,0 +1,17 @@
+{
+  "name": "stock-shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stock inventory and shop management for one storekeeper",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node tests/smoke.js && node tests/local-ai.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
