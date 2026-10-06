@@ -102,6 +102,23 @@ async function route(request, env) {
     }
     return json({ results });
   }
+  if (url.pathname === '/api/counts' && method === 'GET') {
+    const date = url.searchParams.get('date') || today();
+    return json((await env.DB.prepare(`SELECT c.*,i.name AS item FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.count_date=?`).bind(date).all()).results);
+  }
+  if (url.pathname === '/api/monthly' && method === 'GET') {
+    const ym = url.searchParams.get('month') || today().slice(0, 7); const start = `${ym}-01`; const [year, month] = ym.split('-').map(Number); const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0,10); const prev = new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0,10);
+    const close = await balances(env.DB, end); const open = await balances(env.DB, prev); const movements = (await env.DB.prepare(`SELECT item_id,SUM(CASE WHEN direction='STORE_TO_SHOP' THEN qty ELSE 0 END) to_shop,SUM(CASE WHEN direction='SHOP_TO_STORE' THEN qty ELSE 0 END) to_store FROM movements WHERE movement_date BETWEEN ? AND ? GROUP BY item_id`).bind(start,end).all()).results; const adjustments = (await env.DB.prepare(`SELECT item_id,SUM(CASE WHEN location='SHOP' THEN delta ELSE 0 END) adj_shop,SUM(CASE WHEN location='STORE' THEN delta ELSE 0 END) adj_store FROM adjustments WHERE adj_date BETWEEN ? AND ? GROUP BY item_id`).bind(start,end).all()).results;
+    const rows = close.map((c) => { const o=open.find((x)=>x.id===c.id)||{}; const m=movements.find((x)=>x.item_id===c.id)||{}; const a=adjustments.find((x)=>x.item_id===c.id)||{}; return { item_id:c.id,item:c.name,category:c.category,unit:c.unit,open_shop:o.shop||0,open_store:o.store||0,to_shop:m.to_shop||0,to_store:m.to_store||0,adj_shop:a.adj_shop||0,adj_store:a.adj_store||0,close_shop:c.shop,close_store:c.store }; });
+    return json({ month: ym, start, end, rows, totals: { item:'TOTAL', close_shop:rows.reduce((n,r)=>n+r.close_shop,0), close_store:rows.reduce((n,r)=>n+r.close_store,0) }, weeks: [] });
+  }
+  if (url.pathname === '/api/history' && method === 'GET') {
+    const date = url.searchParams.get('date') || today(); const from = `${date.slice(0,7)}-01`;
+    const balancesNow = await balances(env.DB); const movements = (await env.DB.prepare(`SELECT m.movement_date AS date,i.name AS item,m.direction,m.qty,m.note,m.user FROM movements m JOIN items i ON i.id=m.item_id WHERE m.movement_date BETWEEN ? AND ? ORDER BY m.id DESC`).bind(from,date).all()).results;
+    const adjustments = (await env.DB.prepare(`SELECT a.adj_date AS date,i.name AS item,a.location,a.delta,a.reason,a.user FROM adjustments a JOIN items i ON i.id=a.item_id WHERE a.adj_date BETWEEN ? AND ? ORDER BY a.id DESC`).bind(from,date).all()).results;
+    const counts = (await env.DB.prepare(`SELECT c.count_date AS date,i.name AS item,c.system_qty,c.physical_qty,c.difference,c.status,c.user FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.count_date BETWEEN ? AND ? ORDER BY c.id DESC`).bind(from,date).all()).results;
+    return json({ range:{from,to:date}, balances:balancesNow, movements, adjustments, counts });
+  }
   if (url.pathname === '/api/alerts' && method === 'GET') {
     const status = url.searchParams.get('status'); const q = status ? 'SELECT a.*,i.name AS item FROM alerts a JOIN items i ON i.id=a.item_id WHERE a.status=? ORDER BY a.id DESC' : 'SELECT a.*,i.name AS item FROM alerts a JOIN items i ON i.id=a.item_id WHERE a.status IN (\'OPEN\',\'ACKNOWLEDGED\') ORDER BY a.id DESC';
     return json((await env.DB.prepare(q).bind(...(status ? [status] : [])).all()).results);
