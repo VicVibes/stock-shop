@@ -1,0 +1,18 @@
+INSERT OR IGNORE INTO items (name, category, unit, min_shop, min_store, opening_shop, opening_store, is_sample) VALUES
+('Paper (6 cartons + rims)', 'Paper & Printing Materials', 'cartons', 1, 1, 6, 0, 1),
+('Paper (3 x 2 rims)', 'Paper & Printing Materials', 'packs', 1, 1, 3, 0, 1),
+('Passport Paper (13 packs)', 'Paper & Printing Materials', 'packs', 1, 1, 13, 0, 1),
+('A4 Glossy (2 packs)', 'Paper & Printing Materials', 'packs', 1, 1, 2, 0, 1),
+('ID Card Plastic (450)', 'ID Card Materials', 'pieces', 1, 1, 450, 0, 1),
+('Lamination ID Card (100)', 'ID Card Materials', 'rolls', 1, 1, 100, 0, 1),
+('Nylon File (89)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 89, 0, 1),
+('Cover (14)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 14, 0, 1),
+('Long Envelope (12)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 12, 0, 1),
+('White Envelope Big (10)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 10, 0, 1),
+('White Envelope (21)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 21, 0, 1),
+('Small Envelope Brown (20)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 20, 0, 1),
+('Brown Big Envelope (20)', 'Files, Covers & Envelopes', 'pieces', 1, 1, 20, 0, 1),
+('Back Spiral Bind (90)', 'Binding Materials', 'pieces', 1, 1, 90, 0, 1),
+('Front Spiral Bind (90)', 'Binding Materials', 'pieces', 1, 1, 90, 0, 1),
+('Big Stick (13)', 'Binding Materials', 'pieces', 1, 1, 13, 0, 1),
+('Small Stick (20)', 'Binding Materials', 'pieces', 1, 1, 20, 0, 1);

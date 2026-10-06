@@ -6,12 +6,18 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node tests/smoke.js && node tests/local-ai.js"
+    "test": "node tests/smoke.js && node tests/local-ai.js",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy",
+    "cf:migrate": "wrangler d1 migrations apply stock-shop --remote"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
   }
 }
