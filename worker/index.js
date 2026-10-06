@@ -34,6 +34,20 @@ async function route(request, env) {
     const q = all ? 'SELECT * FROM items ORDER BY name' : 'SELECT * FROM items WHERE active=1 ORDER BY name';
     return json((await env.DB.prepare(q).all()).results);
   }
+  if (url.pathname === '/api/items' && method === 'POST') {
+    const a = await body(request); const name = String(a.name || '').trim(); if (!name) fail('Item name is required.');
+    try {
+      const result = await env.DB.prepare(`INSERT INTO items (name,category,unit,min_shop,min_store,opening_shop,opening_store) VALUES (?,?,?,?,?,?,?) RETURNING *`).bind(name, String(a.category || 'General'), String(a.unit || 'pcs'), Number(a.min_shop || 0), Number(a.min_store || 0), Number(a.opening_shop || 0), Number(a.opening_store || 0)).first();
+      return json(result, 201);
+    } catch (e) { if (String(e.message).includes('UNIQUE')) fail('An item with that name already exists.', 409); throw e; }
+  }
+  const itemMatch = url.pathname.match(/^\/api\/items\/(\d+)$/);
+  if (itemMatch && method === 'PATCH') {
+    const a = await body(request); const id = Number(itemMatch[1]); const old = await env.DB.prepare('SELECT * FROM items WHERE id=?').bind(id).first(); if (!old) fail('Item not found.', 404);
+    const next = { name: a.name ?? old.name, category: a.category ?? old.category, unit: a.unit ?? old.unit, min_shop: a.min_shop ?? old.min_shop, min_store: a.min_store ?? old.min_store, opening_shop: a.opening_shop ?? old.opening_shop, opening_store: a.opening_store ?? old.opening_store, active: a.active === undefined ? old.active : (a.active ? 1 : 0) };
+    const result = await env.DB.prepare(`UPDATE items SET name=?,category=?,unit=?,min_shop=?,min_store=?,opening_shop=?,opening_store=?,active=? WHERE id=? RETURNING *`).bind(next.name,next.category,next.unit,next.min_shop,next.min_store,next.opening_shop,next.opening_store,next.active,id).first();
+    return json(result);
+  }
   if (url.pathname === '/api/dashboard' && method === 'GET') {
     const rows = await balances(env.DB);
     const alerts = (await env.DB.prepare("SELECT COUNT(*) AS c FROM alerts WHERE status='OPEN'").first()).c;
@@ -82,6 +96,31 @@ async function route(request, env) {
       results.push({ item: item.name, date, system: current.shop, physical, difference, status });
     }
     return json({ results });
+  }
+  if (url.pathname === '/api/alerts' && method === 'GET') {
+    const status = url.searchParams.get('status'); const q = status ? 'SELECT a.*,i.name AS item FROM alerts a JOIN items i ON i.id=a.item_id WHERE a.status=? ORDER BY a.id DESC' : 'SELECT a.*,i.name AS item FROM alerts a JOIN items i ON i.id=a.item_id WHERE a.status IN (\'OPEN\',\'ACKNOWLEDGED\') ORDER BY a.id DESC';
+    return json((await env.DB.prepare(q).bind(...(status ? [status] : [])).all()).results);
+  }
+  const alertMatch = url.pathname.match(/^\/api\/alerts\/(\d+)\/review$/);
+  if (alertMatch && method === 'POST') {
+    const a = await body(request); if (!['acknowledge','clear'].includes(a.action)) fail('Invalid alert action.');
+    const status = a.action === 'clear' ? 'CLEARED' : 'ACKNOWLEDGED'; const result = await env.DB.prepare(`UPDATE alerts SET status=?,resolved_at=CASE WHEN ?='CLEARED' THEN datetime('now') ELSE resolved_at END,resolution=? WHERE id=? RETURNING *`).bind(status,status,String(a.note || a.action),Number(alertMatch[1])).first();
+    if (!result) fail('Alert not found.', 404); return json(result);
+  }
+  if (url.pathname.startsWith('/api/reports/') && method === 'GET') {
+    const type = url.pathname.split('/').pop();
+    if (type === 'balances') return json(await balances(env.DB, url.searchParams.get('date')));
+    if (type === 'movements') return json((await env.DB.prepare(`SELECT m.*,i.name AS item FROM movements m JOIN items i ON i.id=m.item_id ORDER BY m.movement_date DESC,m.id DESC`).all()).results);
+    if (type === 'discrepancies') return json((await env.DB.prepare(`SELECT c.*,i.name AS item FROM daily_counts c JOIN items i ON i.id=c.item_id WHERE c.status <> 'MATCHED' ORDER BY c.count_date DESC`).all()).results);
+    if (type === 'low-stock') return json((await balances(env.DB)).filter((r) => (r.shop < r.min_shop) || (r.store < r.min_store)));
+    return json([]);
+  }
+  if (url.pathname === '/api/assistant' && method === 'POST') {
+    if (!env.GOOGLE_API_KEY && !env.AI) fail('Assistant is not configured.', 503);
+    const a = await body(request); const prompt = String(a.message || '').trim(); if (!prompt) fail('Type a message first.');
+    if (env.AI) { const out = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { prompt: `You are the stock assistant. Current stock data: ${JSON.stringify(await balances(env.DB))}\nUser: ${prompt}` }); return json({ reply: out.response || String(out), actions: [] }); }
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(env.GOOGLE_API_KEY)}`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ contents:[{role:'user',parts:[{text:prompt}]}]}) });
+    const data = await resp.json(); return json({ reply: data.candidates?.[0]?.content?.parts?.map((p)=>p.text||'').join('') || 'No response.', actions: [] });
   }
   return null;
 }
