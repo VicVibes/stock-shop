@@ -11,6 +11,11 @@ async function itemBy(db, ref) {
   return row;
 }
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
+function authorized(request, env) {
+  const expected = env.STOCK_SHOP_TOKEN;
+  if (!expected) return false;
+  return request.headers.get('authorization') === `Bearer ${expected}`;
+}
 function validDate(value) {
   const d = String(value || today());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(`${d}T00:00:00Z`)) || d > today()) fail('Date must be a valid date that is not in the future.');
@@ -47,6 +52,7 @@ async function balances(db, asOf = null) {
 async function route(request, env) {
   const url = new URL(request.url);
   const method = request.method;
+  if (method !== 'GET' && !authorized(request, env)) return json({ error: 'Authentication required.' }, 401);
   if (url.pathname === '/api/status' && method === 'GET') {
     return json({ user: env.STOCK_USER || 'Storekeeper', ai: Boolean(env.AI || env.GOOGLE_API_KEY), aiProvider: env.AI ? 'cloudflare' : 'google', db: 'D1' });
   }
