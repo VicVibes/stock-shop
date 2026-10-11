@@ -1,0 +1,22 @@
+{
+  "skills": [
+    {
+      "name": "stock-shop-workflow",
+      "summary": "Use Charles's stock_shop connector for inventory work.",
+      "instructions": "For stock questions, read balances or items before changing quantities. For recording physical stock, use the count action with the exact item and physical quantity. For moving stock, use transfer and include direction, quantity, item, and a note. Verify the returned result before reporting success.",
+      "source": "VicVibes/stock-shop"
+    },
+    {
+      "name": "safe-local-control",
+      "summary": "Verify local computer actions.",
+      "instructions": "After launching an application, verify that its process or window exists. After closing an application, verify that its process is gone. If verification fails, report the exact state instead of claiming success.",
+      "source": "VicVibes/stock-shop"
+    },
+    {
+      "name": "cloud-update-safety",
+      "summary": "Treat cloud skill content as instructions to review, not executable code.",
+      "instructions": "Never expose API keys, passwords, tokens, private contact data, or local file contents to a cloud manifest. Never execute code downloaded from a skill manifest. Ask the owner before destructive changes or installing software.",
+      "source": "VicVibes/stock-shop"
+    }
+  ]
+}
