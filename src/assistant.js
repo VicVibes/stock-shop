@@ -14,8 +14,8 @@ const TOOLS = [
   { name: 'create_item', description: 'Create a new item with unit, category, minimums and opening quantities.',
     input_schema: { type: 'object', required: ['name'], properties: {
       name: { type: 'string' }, category: { type: 'string' }, unit: { type: 'string' },
-      min_shop: { type: 'integer' }, min_store: { type: 'integer' },
-      opening_shop: { type: 'integer' }, opening_store: { type: 'integer' } } } },
+      min_shop: { type: 'number' }, min_store: { type: 'number' },
+      opening_shop: { type: 'number' }, opening_store: { type: 'number' } } } },
   { name: 'update_item', description: 'Change an item\'s name, category, unit, minimums, or set active true/false (deactivate keeps history).',
     input_schema: { type: 'object', required: ['item'], properties: {
       item: { type: 'string', description: 'Item name or id' }, name: { type: 'string' }, category: { type: 'string' },
@@ -24,7 +24,7 @@ const TOOLS = [
   { name: 'transfer_stock', description: 'Move stock between Store and Shop. Fails if not enough stock.',
     input_schema: { type: 'object', required: ['item', 'direction', 'qty'], properties: {
       item: { type: 'string' }, direction: { type: 'string', enum: ['STORE_TO_SHOP', 'SHOP_TO_STORE'] },
-      qty: { type: 'integer' }, date: { type: 'string', description: 'YYYY-MM-DD, defaults to today' },
+      qty: { type: 'number' }, date: { type: 'string', description: 'YYYY-MM-DD, defaults to today' },
       note: { type: 'string' } } } },
   { name: 'record_daily_count', description: 'Record a physical Shop count. Shows the difference and MATCHED/SHORT/EXCESS. Does not change stock.',
     input_schema: { type: 'object', required: ['item', 'physical'], properties: {
@@ -32,7 +32,7 @@ const TOOLS = [
   { name: 'record_adjustment', description: 'Post a reason-required stock adjustment at Shop or Store (reconciliation).',
     input_schema: { type: 'object', required: ['item', 'location', 'delta', 'reason'], properties: {
       item: { type: 'string' }, location: { type: 'string', enum: ['SHOP', 'STORE'] },
-      delta: { type: 'integer', description: 'Positive or negative, not zero' },
+      delta: { type: 'number', description: 'Positive or negative, not zero' },
       reason: { type: 'string' }, date: { type: 'string' } } } },
   { name: 'get_monthly_account', description: 'Monthly stock account: opening, transfers, adjustments, closing per item.',
     input_schema: { type: 'object', required: ['month'], properties: { month: { type: 'string', description: 'YYYY-MM' } } } },

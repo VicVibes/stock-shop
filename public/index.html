@@ -53,6 +53,14 @@
   table { width:100%; border-collapse:collapse; background:var(--card); }
   th, td { padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; white-space:nowrap; }
   th { font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); background:#fafbfc; }
+  .inventory-table { table-layout:fixed; }
+  .inventory-table th:nth-child(1), .inventory-table td:nth-child(1) { width:27%; white-space:normal; overflow-wrap:anywhere; }
+  .inventory-table th:nth-child(2), .inventory-table td:nth-child(2) { width:25%; white-space:normal; overflow-wrap:anywhere; }
+  .inventory-table th:nth-child(3), .inventory-table td:nth-child(3) { width:15%; }
+  .inventory-table th:nth-child(4), .inventory-table td:nth-child(4) { width:11%; }
+  .inventory-table th:nth-child(5), .inventory-table td:nth-child(5) { width:12%; }
+  .inventory-table th:nth-child(6), .inventory-table td:nth-child(6) { width:10%; }
+  .inventory-table .tag { display:inline-block; margin:2px 0 0 3px; vertical-align:middle; }
   td input[type=number] { width:110px; }
   .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; font-weight:600; }
   .badge.matched, .badge.ok { background:#dcfce7; color:var(--ok); }
@@ -90,6 +98,8 @@
   .count-table td { padding:10px 13px; }
   .count-table td:nth-child(3) input { max-width:110px; }
   .count-table .physical-input { width:104px; }
+  .count-table .sys, .count-table .diff, .count-table .st { font-variant-numeric:tabular-nums; }
+  .count-table .diff { font-weight:800; color:var(--accent-dark); }
   .count-correction-note { color:#b45309; font-size:12px; font-weight:650; }
   @media (max-width:640px) {
     header .brand { padding:7px 12px 3px; font-size:16px; }
@@ -160,7 +170,6 @@
   <div class="quick-actions" aria-label="Quick actions">
     <button type="button" data-action="move">Move stock</button>
     <button type="button" data-action="count">Daily count</button>
-    <button type="button" data-action="reports">Report</button>
     <button type="button" data-action="history">History & summaries</button>
     <button type="button" data-action="monthly">Monthly account</button>
     <button type="button" data-action="assistant">Assistant</button>
@@ -178,7 +187,9 @@ const monthStart = () => today().slice(0, 8) + '01';
 const qp = () => Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''));
 const dirLabel = (d) => (d === 'STORE_TO_SHOP' ? 'Store → Shop' : 'Shop → Store');
 const logoStorageKey = 'barrytech-logo';
-const themeStorageKey = 'barrytech-theme';
+// Keep the website theme completely separate from Charles's desktop HUD
+// theme/configuration. It is a browser-only preference for this site.
+const themeStorageKey = 'stock-shop-theme';
 const logoInput = $('#logo-input');
 const logoImage = $('#brand-logo');
 const brand = $('#brand');
@@ -238,11 +249,27 @@ loadSavedLogo();
 loadTheme();
 
 async function api(path, opts = {}) {
-  const r = await fetch('/api' + path, {
-    ...opts,
-    headers: { 'content-type': 'application/json' },
+  const method = String(opts.method || 'GET').toUpperCase();
+  const token = localStorage.getItem('stock_shop_token') || '';
+  const headers = { ...(opts.headers || {}), 'content-type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let r = await fetch('/api' + path, {
+    ...opts, method, headers,
     body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body,
   });
+  // Writes are protected by the Worker. Ask once for the local operator token
+  // instead of silently showing "Authentication required" for every manual edit.
+  if (r.status === 401 && method !== 'GET') {
+    const entered = window.prompt('Stock Shop token (saved only in this browser):');
+    if (entered && entered.trim()) {
+      localStorage.setItem('stock_shop_token', entered.trim());
+      headers.Authorization = `Bearer ${entered.trim()}`;
+      r = await fetch('/api' + path, {
+        ...opts, method, headers,
+        body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body,
+      });
+    }
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
   return j;
@@ -255,9 +282,9 @@ function toast(msg, ok = true) {
   t._h = setTimeout(() => (t.className = 'toast'), 3500);
 }
 // Columns: [label, key | (row) => html]. Strings are escaped; functions must escape their own text.
-function table(rows, cols) {
+function table(rows, cols, className = '') {
   if (!rows || !rows.length) return '<div class="card muted">Nothing to show yet.</div>';
-  return `<div class="scroll"><table><thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>
+  return `<div class="scroll"><table class="${className}"><thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>
     ${rows.map((r) => `<tr>${cols.map((c) => {
       const v = typeof c[1] === 'function' ? c[1](r) : esc(r[c[1]]);
       return `<td>${v ?? ''}</td>`;
@@ -307,13 +334,13 @@ async function stockView(loc) {
     const q = $('#q').value.trim().toLowerCase();
     const list = rows.filter((r) => r.name.toLowerCase().includes(q));
     $('#tbl').innerHTML = table(list, [
-      ['Item', (r) => esc(r.name) + (r.is_sample ? ' <span class="tag">SAMPLE</span>' : '')],
+      ['Item', (r) => esc(r.name)],
       ['Category', 'category'],
       ['Qty', (r) => `<b>${r[key]}</b> ${esc(r.unit)}`],
       ['Minimum', (r) => r[minKey]],
       ['Status', (r) => badge(statusOf(r[key], r[minKey]))],
       ['', (r) => `<a class="btn small ghost" href="#/move?id=${r.id}&dir=${loc === 'SHOP' ? 'STORE_TO_SHOP' : 'SHOP_TO_STORE'}">Move</a>`],
-    ]);
+    ], 'inventory-table');
   };
   $('#q').oninput = draw;
   draw();
@@ -334,7 +361,7 @@ async function move() {
       <div><div class="small muted">Direction</div><div class="seg">
         <label><input type="radio" name="direction" value="STORE_TO_SHOP" ${p.dir !== 'SHOP_TO_STORE' ? 'checked' : ''}> Store → Shop</label>
         <label><input type="radio" name="direction" value="SHOP_TO_STORE" ${p.dir === 'SHOP_TO_STORE' ? 'checked' : ''}> Shop → Store</label></div></div>
-      <label>Quantity<input type="number" name="qty" min="1" step="1" required></label>
+      <label>Quantity<input type="number" name="qty" min="0.001" step="any" required></label>
       <label>Note (optional)<input name="note" maxlength="200"></label>
       <div id="avail" class="muted" style="grid-column:1/-1"></div>
       <button class="btn" id="go" type="submit">Record transfer</button>
@@ -379,7 +406,9 @@ async function count() {
   const existing = Object.fromEntries((await api(`/counts?date=${date}`)).map((c) => [c.item_id, c]));
   const renderRows = (rows, selector, correction = false) => rows.map((r) => {
     const saved = existing[r.id];
-    const value = correction ? (saved ? saved.physical_qty : '') : (saved ? saved.physical_qty : '');
+    // New dates intentionally start blank. A saved count for the selected
+    // date is restored; otherwise the operator enters a fresh physical count.
+    const value = saved ? saved.physical_qty : '';
     return `<tr data-id="${r.id}">
       <td>${esc(r.name)} <span class="muted small">${esc(r.unit)}</span></td>
       <td class="sys">${r.shop}</td>
@@ -388,7 +417,7 @@ async function count() {
   }).join('');
   $('#app').innerHTML = `
     <h1>Daily Shop count <small>${date}</small></h1>
-    <div class="count-file"><h3>Shop floor count</h3><p>Enter the physical quantity or correct a previously saved count. Stock balances are never changed.</p></div>
+    <div class="count-file"><h3>Shop floor count</h3><p>Values carry forward automatically. Edit only the items whose physical quantity changed, then save.</p></div>
     <div class="count-tabs" role="tablist" aria-label="Daily count options">
       <button class="count-tab active" id="count-tab" role="tab" aria-selected="true">Count</button>
       <button class="count-tab" id="correction-tab" role="tab" aria-selected="false">Correction</button>
@@ -416,15 +445,29 @@ async function count() {
           <td>${esc(r.name)} <span class="muted small">${esc(r.unit)}</span></td>
           <td class="sys">${r.shop}</td>
           <td>${saved ? saved.physical_qty : '—'}</td>
-          <td><input type="number" min="0" step="1" class="phys physical-input" value="${saved ? saved.physical_qty : ''}" aria-label="Correct physical shop count"></td>
+          <td><input type="number" min="0" step="any" class="phys physical-input" value="${saved ? saved.physical_qty : ''}" aria-label="Correct physical shop count"></td>
           <td class="diff">—</td><td class="st"></td></tr>`;
       }).join('')}</tbody></table></div>
     </div>`;
 
   const bindRecalc = (body) => {
+    if (!body) return;
+    body.addEventListener('input', (event) => {
+      const field = event.target.closest('.phys');
+      const row = field && field.closest('tr');
+      if (row) recalc(row);
+    });
+    body.addEventListener('change', (event) => {
+      const field = event.target.closest('.phys');
+      const row = field && field.closest('tr');
+      if (row) recalc(row);
+    });
     body.querySelectorAll('tr').forEach((tr) => {
       const field = tr.querySelector('.phys');
-      if (field) field.oninput = () => recalc(tr);
+      if (field) {
+        field.oninput = () => recalc(tr);
+        field.onchange = () => recalc(tr);
+      }
       recalc(tr);
     });
   };
@@ -492,11 +535,28 @@ async function monthly() {
   const m = qp().month || today().slice(0, 7);
   const d = await api(`/monthly?month=${m}`);
   const names = d.rows.map((r) => `<option value="${esc(r.item)}"></option>`).join('');
+  let dailyPage = 0;
+  const pageSize = 7;
+  const render = () => {
+    const daily = d.daily || [];
+    const pages = Math.max(1, Math.ceil(daily.length / pageSize));
+    dailyPage = Math.min(dailyPage, pages - 1);
+    const visible = daily.slice(dailyPage * pageSize, dailyPage * pageSize + pageSize);
+    $('#daily-ledger').innerHTML = table(visible, [
+      ['Date', 'date'], ['What was used', (r) => r.used_items?.length ? r.used_items.map((x) => `${esc(x.item)}: ${x.qty}`).join('<br>') : '—'], ['Used', (r) => `<b>${r.used}</b>`], ['Moved to shop', 'to_shop'],
+      ['Moved to store', 'to_store'], ['Adjustments', 'adjustments'], ['Net shop change', 'net_shop'],
+    ]) || '<div class="card muted">No stock activity recorded for this month.</div>';
+    $('#daily-pagination').innerHTML = `<button class="btn small ghost" id="daily-prev" ${dailyPage === 0 ? 'disabled' : ''}>Previous</button><span class="small muted">Page ${dailyPage + 1} of ${pages}</span><button class="btn small ghost" id="daily-next" ${dailyPage >= pages - 1 ? 'disabled' : ''}>Next</button>`;
+    $('#daily-prev').onclick = () => { dailyPage--; render(); };
+    $('#daily-next').onclick = () => { dailyPage++; render(); };
+  };
   $('#app').innerHTML = `
     <h1>Monthly stock account <small>${m}</small></h1>
-    <div class="toolbar"><input type="month" id="mm" value="${m}">
-      <a class="btn ghost" href="/api/reports/monthly?month=${m}&format=csv">Download CSV</a>
-      <button class="btn ghost" onclick="print()">Print</button></div>
+    <div class="toolbar"><input type="month" id="mm" value="${m}"><button class="btn ghost" onclick="print()">Print</button></div>
+    <h2>Daily stock usage</h2>
+    <p class="muted small">Used is stock removed from the shop through a negative shop adjustment. Transfers and other adjustments are shown separately.</p>
+    <div id="daily-ledger"></div><div class="toolbar" id="daily-pagination"></div>
+    <h2>Item summary</h2>
     ${table([...d.rows, d.totals], [
       ['Item', (r) => esc(r.item)], ['Open Shop', 'open_shop'], ['Open Store', 'open_store'],
       ['To Shop', 'to_shop'], ['To Store', 'to_store'], ['Adj Shop', 'adj_shop'], ['Adj Store', 'adj_store'],
@@ -509,10 +569,11 @@ async function monthly() {
       <label>Item<input name="item" list="adjitems" required></label>
       <datalist id="adjitems">${names}</datalist>
       <label>Location<select name="location"><option value="SHOP">Shop</option><option value="STORE">Store</option></select></label>
-      <label>Change (+ or −)<input type="number" name="delta" step="1" required></label>
+      <label>Change (+ or −)<input type="number" name="delta" step="any" required></label>
       <label>Reason (required)<input name="reason" minlength="3" maxlength="200" required></label>
       <button class="btn" type="submit">Post adjustment</button>
     </form>`;
+  render();
   $('#mm').onchange = (e) => (location.hash = `#/monthly?month=${e.target.value}`);
   $('#adj').onsubmit = async (e) => {
     e.preventDefault();
@@ -721,13 +782,13 @@ async function settings() {
       <p><b>Storekeeper:</b> ${esc(s.user)}</p>
       <p><b>AI assistant:</b> ${s.ai ? `Connected to ${s.aiProvider === 'local' ? 'local AI' : 'Google Gemini'}` : 'Not configured'}</p>
       ${s.aiProvider === 'local' ? `<p class="muted small">Local AI: ${esc(s.localAiModel)}</p>` : ''}
-      <p class="muted small">Configuration is managed on the server. In-app alerts are always active.</p>
+      <p class="muted small">Configuration is managed on the server. AI keys are never sent to or stored in this browser.</p>
     </div>`;
   $('#theme-toggle').onchange = (e) => applyTheme(e.target.checked ? 'dark' : 'light');
   applyTheme(localStorage.getItem(themeStorageKey) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 }
 
-const views = { dashboard, shop: () => stockView('SHOP'), store: () => stockView('STORE'), move, count, monthly, items, history, reports, alerts, assistant, settings };
+const views = { dashboard, shop: () => stockView('SHOP'), store: () => stockView('STORE'), move, count, monthly, items, history, alerts, assistant, settings };
 async function route() {
   const name = (location.hash.replace('#/', '').split('?')[0]) || 'dashboard';
   const fn = views[name] || views.dashboard;

@@ -27,10 +27,10 @@ CREATE TABLE IF NOT EXISTS items (
   name TEXT NOT NULL UNIQUE COLLATE NOCASE,
   category TEXT NOT NULL DEFAULT 'General',
   unit TEXT NOT NULL DEFAULT 'pcs',
-  min_shop INTEGER NOT NULL DEFAULT 0 CHECK (min_shop >= 0),
-  min_store INTEGER NOT NULL DEFAULT 0 CHECK (min_store >= 0),
-  opening_shop INTEGER NOT NULL DEFAULT 0 CHECK (opening_shop >= 0),
-  opening_store INTEGER NOT NULL DEFAULT 0 CHECK (opening_store >= 0),
+  min_shop REAL NOT NULL DEFAULT 0 CHECK (min_shop >= 0),
+  min_store REAL NOT NULL DEFAULT 0 CHECK (min_store >= 0),
+  opening_shop REAL NOT NULL DEFAULT 0 CHECK (opening_shop >= 0),
+  opening_store REAL NOT NULL DEFAULT 0 CHECK (opening_store >= 0),
   active INTEGER NOT NULL DEFAULT 1,
   is_sample INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -41,34 +41,34 @@ CREATE TABLE IF NOT EXISTS movements (
   request_id TEXT UNIQUE,
   item_id INTEGER NOT NULL REFERENCES items(id),
   direction TEXT NOT NULL CHECK (direction IN ('STORE_TO_SHOP','SHOP_TO_STORE')),
-  qty INTEGER NOT NULL CHECK (qty > 0),
+  qty REAL NOT NULL CHECK (qty > 0),
   movement_date TEXT NOT NULL,
   note TEXT,
   user TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  shop_before INTEGER, shop_after INTEGER,
-  store_before INTEGER, store_after INTEGER
+  shop_before REAL, shop_after REAL,
+  store_before REAL, store_after REAL
 );
 
 CREATE TABLE IF NOT EXISTS adjustments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   item_id INTEGER NOT NULL REFERENCES items(id),
   location TEXT NOT NULL CHECK (location IN ('SHOP','STORE')),
-  delta INTEGER NOT NULL CHECK (delta <> 0),
+  delta REAL NOT NULL CHECK (delta <> 0),
   reason TEXT NOT NULL,
   adj_date TEXT NOT NULL,
   user TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  before_qty INTEGER, after_qty INTEGER
+  before_qty REAL, after_qty REAL
 );
 
 CREATE TABLE IF NOT EXISTS daily_counts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   item_id INTEGER NOT NULL REFERENCES items(id),
   count_date TEXT NOT NULL,
-  system_qty INTEGER NOT NULL,
-  physical_qty INTEGER NOT NULL CHECK (physical_qty >= 0),
-  difference INTEGER NOT NULL,
+  system_qty REAL NOT NULL,
+  physical_qty REAL NOT NULL CHECK (physical_qty >= 0),
+  difference REAL NOT NULL,
   status TEXT NOT NULL,
   user TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

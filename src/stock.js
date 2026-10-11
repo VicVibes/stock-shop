@@ -18,8 +18,8 @@ function checkDate(d) {
 }
 function toInt(v, label, min = 0) {
   const n = typeof v === 'string' && v.trim() === '' ? NaN : Number(v);
-  if (!Number.isInteger(n) || n < min) {
-    throw fail(`${label} must be a whole number ${min > 0 ? 'greater than zero' : '0 or more'}.`);
+  if (!Number.isFinite(n) || n < min) {
+    throw fail(`${label} must be a number ${min > 0 ? 'greater than zero' : '0 or more'}.`);
   }
   return n;
 }
@@ -233,7 +233,7 @@ function listCounts(date) {
 // ---------- adjustments (explicit, reason required) ----------
 function adjust(data, user) {
   const delta = Number(data.delta);
-  if (!Number.isInteger(delta) || delta === 0) throw fail('Adjustment must be a whole number, not zero.');
+  if (!Number.isFinite(delta) || delta === 0) throw fail('Adjustment must be a number, not zero.');
   const location = String(data.location || '').toUpperCase();
   if (!['SHOP', 'STORE'].includes(location)) throw fail('Location must be SHOP or STORE.');
   const reason = String(data.reason || '').trim();

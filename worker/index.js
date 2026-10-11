@@ -1,5 +1,13 @@
 const json = (body, status = 200) => Response.json(body, { status });
 
+// Preserve the operator's stock-sheet order. New items not listed here are
+// appended after the established list instead of being sorted alphabetically.
+const STOCK_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
+const orderedItems = (rows) => rows.sort((a, b) => {
+  const ai = STOCK_ORDER.indexOf(Number(a.id)); const bi = STOCK_ORDER.indexOf(Number(b.id));
+  return (ai < 0 ? STOCK_ORDER.length : ai) - (bi < 0 ? STOCK_ORDER.length : bi);
+});
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 async function body(request) { return request.json().catch(() => ({})); }
@@ -22,7 +30,7 @@ function validDate(value) {
   return d;
 }
 function nonNegative(value, label) {
-  const n = Number(value ?? 0); if (!Number.isInteger(n) || n < 0) fail(`${label} must be a non-negative whole number.`); return n;
+  const n = Number(value ?? 0); if (!Number.isFinite(n) || n < 0) fail(`${label} must be a non-negative number.`); return n;
 }
 async function syncAlerts(db) {
   const rows = await balances(db);
@@ -44,9 +52,9 @@ async function balances(db, asOf = null) {
   const { results } = await db.prepare(`
     SELECT i.*, i.opening_shop + COALESCE((SELECT SUM(CASE WHEN direction='STORE_TO_SHOP' THEN qty ELSE -qty END) FROM movements WHERE item_id=i.id AND movement_date<=?), 0) + COALESCE((SELECT SUM(CASE WHEN location='SHOP' THEN delta ELSE 0 END) FROM adjustments WHERE item_id=i.id AND adj_date<=?), 0) AS shop,
     i.opening_store + COALESCE((SELECT SUM(CASE WHEN direction='SHOP_TO_STORE' THEN qty ELSE -qty END) FROM movements WHERE item_id=i.id AND movement_date<=?), 0) + COALESCE((SELECT SUM(CASE WHEN location='STORE' THEN delta ELSE 0 END) FROM adjustments WHERE item_id=i.id AND adj_date<=?), 0) AS store
-    FROM items i ORDER BY i.name`)
+    FROM items i`)
     .bind(end, end, end, end).all();
-  return results;
+  return orderedItems(results);
 }
 
 async function route(request, env) {
@@ -59,8 +67,8 @@ async function route(request, env) {
   if (url.pathname === '/api/balances' && method === 'GET') return json(await balances(env.DB, url.searchParams.get('asOf')));
   if (url.pathname === '/api/items' && method === 'GET') {
     const all = url.searchParams.get('all') === '1';
-    const q = all ? 'SELECT * FROM items ORDER BY name' : 'SELECT * FROM items WHERE active=1 ORDER BY name';
-    return json((await env.DB.prepare(q).all()).results);
+    const q = all ? 'SELECT * FROM items' : 'SELECT * FROM items WHERE active=1';
+    return json(orderedItems((await env.DB.prepare(q).all()).results));
   }
   if (url.pathname === '/api/items' && method === 'POST') {
     const a = await body(request); const name = String(a.name || '').trim(); if (!name) fail('Item name is required.');
@@ -90,7 +98,7 @@ async function route(request, env) {
   }
   if (url.pathname === '/api/movements' && method === 'POST') {
     const a = await body(request); const qty = Number(a.qty); const direction = a.direction;
-    if (!Number.isInteger(qty) || qty < 1) fail('Quantity must be a positive whole number.');
+    if (!Number.isFinite(qty) || qty <= 0) fail('Quantity must be a positive number.');
     if (!['STORE_TO_SHOP', 'SHOP_TO_STORE'].includes(direction)) fail('Invalid transfer direction.');
     const item = await itemBy(env.DB, a.item_id ?? a.item); if (!item.active) fail('Item is inactive.');
     const current = (await balances(env.DB)).find((r) => r.id === item.id);
@@ -107,7 +115,7 @@ async function route(request, env) {
   }
   if (url.pathname === '/api/adjustments' && method === 'POST') {
     const a = await body(request); const delta = Number(a.delta); const location = String(a.location || '').toUpperCase();
-    if (!Number.isInteger(delta) || delta === 0) fail('Adjustment must be a non-zero whole number.');
+    if (!Number.isFinite(delta) || delta === 0) fail('Adjustment must be a non-zero number.');
     if (!['SHOP', 'STORE'].includes(location)) fail('Invalid location.');
     if (String(a.reason || '').trim().length < 3) fail('A reason is required.');
     const item = await itemBy(env.DB, a.item_id ?? a.item); if (!item.active) fail('Item is inactive.'); validDate(a.date);
@@ -126,9 +134,14 @@ async function route(request, env) {
     const user = env.STOCK_USER || 'Storekeeper'; const results = [];
     for (const line of lines) {
       const item = await itemBy(env.DB, line.item_id ?? line.item); const current = (await balances(env.DB)).find((r) => r.id === item.id); const physical = Number(line.physical); 
-      if (!Number.isInteger(physical) || physical < 0) { results.push({ item: item.name, error: 'Invalid physical count.' }); continue; }
+      if (!Number.isFinite(physical) || physical < 0) { results.push({ item: item.name, error: 'Invalid physical count.' }); continue; }
       const difference = physical - current.shop; const status = difference === 0 ? 'MATCHED' : difference < 0 ? 'SHORT' : 'EXCESS';
-      await env.DB.prepare(`INSERT INTO daily_counts (item_id,count_date,system_qty,physical_qty,difference,status,user) VALUES (?,?,?,?,?,?,?) ON CONFLICT(item_id,count_date) DO UPDATE SET system_qty=excluded.system_qty,physical_qty=excluded.physical_qty,difference=excluded.difference,status=excluded.status,user=excluded.user`).bind(item.id, date, current.shop, physical, difference, status, user).run();
+      const statements = [env.DB.prepare(`INSERT INTO daily_counts (item_id,count_date,system_qty,physical_qty,difference,status,user) VALUES (?,?,?,?,?,?,?) ON CONFLICT(item_id,count_date) DO UPDATE SET system_qty=excluded.system_qty,physical_qty=excluded.physical_qty,difference=excluded.difference,status=excluded.status,user=excluded.user`).bind(item.id, date, current.shop, physical, difference, status, user)];
+      // A physical count is also the operator's reconciliation of live shop
+      // stock. Without this adjustment it appeared in history but balances
+      // stayed unchanged until a separate manual adjustment was made.
+      if (difference !== 0) statements.push(env.DB.prepare(`INSERT INTO adjustments (item_id,location,delta,reason,adj_date,user,before_qty,after_qty) VALUES (?,?,?,?,?,?,?,?)`).bind(item.id, 'SHOP', difference, 'Reconciled from physical stock count', date, user, current.shop, physical));
+      await env.DB.batch(statements);
       results.push({ item: item.name, date, system: current.shop, physical, difference, status });
     }
     return json({ results });
@@ -141,7 +154,16 @@ async function route(request, env) {
     const ym = url.searchParams.get('month') || today().slice(0, 7); const start = `${ym}-01`; const [year, month] = ym.split('-').map(Number); const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0,10); const prev = new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0,10);
     const close = await balances(env.DB, end); const open = await balances(env.DB, prev); const movements = (await env.DB.prepare(`SELECT item_id,SUM(CASE WHEN direction='STORE_TO_SHOP' THEN qty ELSE 0 END) to_shop,SUM(CASE WHEN direction='SHOP_TO_STORE' THEN qty ELSE 0 END) to_store FROM movements WHERE movement_date BETWEEN ? AND ? GROUP BY item_id`).bind(start,end).all()).results; const adjustments = (await env.DB.prepare(`SELECT item_id,SUM(CASE WHEN location='SHOP' THEN delta ELSE 0 END) adj_shop,SUM(CASE WHEN location='STORE' THEN delta ELSE 0 END) adj_store FROM adjustments WHERE adj_date BETWEEN ? AND ? GROUP BY item_id`).bind(start,end).all()).results;
     const rows = close.map((c) => { const o=open.find((x)=>x.id===c.id)||{}; const m=movements.find((x)=>x.item_id===c.id)||{}; const a=adjustments.find((x)=>x.item_id===c.id)||{}; return { item_id:c.id,item:c.name,category:c.category,unit:c.unit,open_shop:o.shop||0,open_store:o.store||0,to_shop:m.to_shop||0,to_store:m.to_store||0,adj_shop:a.adj_shop||0,adj_store:a.adj_store||0,close_shop:c.shop,close_store:c.store }; });
-    return json({ month: ym, start, end, rows, totals: { item:'TOTAL', close_shop:rows.reduce((n,r)=>n+r.close_shop,0), close_store:rows.reduce((n,r)=>n+r.close_store,0) }, weeks: [] });
+    const dailyMap = {};
+    const touch = (date) => dailyMap[date] || (dailyMap[date] = { date, used: 0, used_items: [], to_shop: 0, to_store: 0, adjustments: 0, net_shop: 0 });
+    const movementRows = (await env.DB.prepare(`SELECT movement_date AS date,direction,SUM(qty) AS qty FROM movements WHERE movement_date BETWEEN ? AND ? GROUP BY movement_date,direction`).bind(start,end).all()).results;
+    for (const m of movementRows) { const d=touch(m.date); const q=Number(m.qty)||0; if (m.direction==='STORE_TO_SHOP') { d.to_shop+=q; d.net_shop+=q; } else { d.to_store+=q; d.net_shop-=q; } }
+    const adjustmentRows = (await env.DB.prepare(`SELECT a.adj_date AS date,a.location,SUM(a.delta) AS delta FROM adjustments a WHERE a.adj_date BETWEEN ? AND ? GROUP BY a.adj_date,a.location`).bind(start,end).all()).results;
+    for (const a of adjustmentRows) { const d=touch(a.date); const q=Number(a.delta)||0; if (a.location==='SHOP') { d.adjustments+=q; d.net_shop+=q; if (q<0) d.used+=Math.abs(q); } }
+    const usedRows = (await env.DB.prepare(`SELECT a.adj_date AS date,i.name AS item,SUM(ABS(a.delta)) AS qty FROM adjustments a JOIN items i ON i.id=a.item_id WHERE a.location='SHOP' AND a.delta<0 AND a.adj_date BETWEEN ? AND ? GROUP BY a.adj_date,a.item_id,i.name ORDER BY a.adj_date,i.name`).bind(start,end).all()).results;
+    for (const u of usedRows) touch(u.date).used_items.push({ item: u.item, qty: Number(u.qty) || 0 });
+    const daily = Object.values(dailyMap).sort((a,b)=>a.date.localeCompare(b.date));
+    return json({ month: ym, start, end, daily, rows, totals: { item:'TOTAL', close_shop:rows.reduce((n,r)=>n+r.close_shop,0), close_store:rows.reduce((n,r)=>n+r.close_store,0) }, weeks: [] });
   }
   if (url.pathname === '/api/history' && method === 'GET') {
     const date = url.searchParams.get('date') || today(); const from = `${date.slice(0,7)}-01`;
